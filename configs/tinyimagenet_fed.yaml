@@ -1,0 +1,71 @@
+task: TinyImageNetFed
+synthesizer: Pattern
+trigger: tri1_3x3
+neurotoxin: False
+invert: False
+
+batch_size: 64
+test_batch_size: 100
+lr: 0.01
+poison_lr: 0.001
+momentum: 0.9
+decay: 0.0005
+epochs: 200
+save_on_epochs: []
+optimizer: SGD
+log_interval: 100
+
+# scheduler: ReduceLROnPlateau
+scheduler: CosineAnnealingLR
+# scheduler: MultiStepLR
+# scheduler_milestones: [10, 40]
+
+pretrained: False
+
+# adjust_learning_rate: [40]
+
+poisoning_proportion: 0.4
+backdoor_label: 0
+
+# resume_model: model_Cifar100Fed_cifar100_benign\model_last.pt.tar.best
+# resume_model: model_Cifar100Fed_Jun.01_11.18.03_cifar100_tri1_2x2_clients_10_scale_5/model_last.pt.tar
+# resume_model: saved_models/model_Cifar100Fed_May.29_13.40.58_cifar100_tri1_3x3_t0_scale_3/model_last.pt.tar
+# resume_model: saved_models/model_Cifar100Fed_May.29_16.55.39_cifar100_tri1_5x5_t0_scale_3/model_last.pt.tar
+# resume_model: model_TinyImageNetFed_Oct.13_02.47.19_tinyimagenet_benign/model_last.pt.tar.best
+
+
+loss_balance: MGDA
+mgda_normalize: none
+
+save_model: True
+log: True
+tb: True
+report_train_loss: False
+
+transform_train: True
+
+fl: True
+fl_no_models: 10
+fl_local_epochs: 2
+fl_adv_local_epochs: 5
+fl_total_participants: 20
+fl_eta: 2
+fl_sample_dirichlet: False
+fl_dirichlet_alpha: None
+fl_diff_privacy:  False
+fl_dp_clip: None
+fl_dp_noise: None
+
+fl_number_of_adversaries: 4
+fl_weight_scale: 2
+start_poison_epoch: 80
+#fl_single_epoch_attack: 1
+
+
+loss_tasks:
+  - backdoor
+  - normal
+#  - nc_adv
+#  - ewc
+#  - latent
+#  - latent_fixed

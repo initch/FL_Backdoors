@@ -1,0 +1,39 @@
+task: MNIST
+synthesizer: Pattern
+trigger: white_3x3
+
+
+batch_size: 64
+test_batch_size: 100
+lr: 0.1
+momentum: 0.9
+decay: 0.0005
+epochs: 100
+save_on_epochs: []
+optimizer: SGD
+log_interval: 100
+scheduler: CosineAnnealingLR
+
+
+# resume_model: model_MNISTFed_Oct.12_14.27.11_mnist_benign/model_last.pt.tar.best
+poisoning_proportion: 0.
+backdoor_label: 4
+backdoor: False
+backdoor_dynamic_position: False
+
+loss_balance: fixed
+mgda_normalize: loss
+
+save_model: True
+log: True
+tb: True
+
+transform_train: True
+
+
+loss_tasks:
+  - backdoor
+  - normal
+#  - neural_cleanse
+#  - sentinet_evasion
+
