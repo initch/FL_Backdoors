@@ -6,7 +6,7 @@ invert: False
 
 batch_size: 64
 test_batch_size: 100
-lr: 0.01
+lr: 0.001
 poison_lr: 0.001
 momentum: 0.9
 decay: 0.0005
@@ -32,6 +32,7 @@ backdoor_label: 0
 # resume_model: saved_models/model_Cifar100Fed_May.29_13.40.58_cifar100_tri1_3x3_t0_scale_3/model_last.pt.tar
 # resume_model: saved_models/model_Cifar100Fed_May.29_16.55.39_cifar100_tri1_5x5_t0_scale_3/model_last.pt.tar
 # resume_model: model_TinyImageNetFed_Oct.13_02.47.19_tinyimagenet_benign/model_last.pt.tar.best
+resume_model: model_TinyImageNet_Oct.15_12.31.14_tinyimagenet_benign_data_pad/model_last.pt.tar
 
 
 loss_balance: MGDA
@@ -58,7 +59,7 @@ fl_dp_noise: None
 
 fl_number_of_adversaries: 4
 fl_weight_scale: 2
-start_poison_epoch: 80
+start_poison_epoch: 50
 #fl_single_epoch_attack: 1
 
 

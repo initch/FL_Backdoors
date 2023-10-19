@@ -5,13 +5,13 @@ class LeNet5(nn.Module):
     def __init__(self, num_classes):
         super(LeNet5, self).__init__()
 
-        self.conv1 = nn.Conv2d(1, 6, 5)
+        self.conv1 = nn.Conv2d(1, 6, 3) # 1, 6, 5
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.conv2 = nn.Conv2d(6, 16, 5) # 6. 16, 5
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(2)
-        self.fc1 = nn.Linear(256, 120)
+        self.fc1 = nn.Linear(256, 120) # 256, 120
         self.relu3 = nn.ReLU()
         self.fc2 = nn.Linear(120, 84)
         self.relu4 = nn.ReLU()

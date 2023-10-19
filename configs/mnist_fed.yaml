@@ -1,10 +1,9 @@
 task: MNISTFed
+random_seed: 0
 synthesizer: Pattern
-trigger: tri4_2x2
+trigger: white_3x3
 neurotoxin: False
-clipping: False
-clipping_norm: 30
-invert: False
+defense: RobustLR
 
 batch_size: 64
 test_batch_size: 100

@@ -128,9 +128,15 @@ class FederatedLearningTask(Task):
             self.dp_add_noise(average_update)
             model_weight = global_model.state_dict()[name]
             model_weight.add_(average_update)
-        # CRFL - clipping
-        # if self.params.clipping:
-        #     self.clip_weight_norm(global_model, self.params.clipping_norm)
+    
+    def aggregate_global_model(self, local_models):
+        global_model = self.model
+        weight_accumulator = self.get_empty_accumulator()
+        for local_model in local_models:
+            local_update = self.get_fl_update(local_model, global_model)
+            self.accumulate_weights(weight_accumulator, local_update)
+        self.update_global_model(weight_accumulator, global_model)
+        return
             
 
     def dp_clip(self, local_update_tensor: torch.Tensor, update_norm):
@@ -154,7 +160,7 @@ class FederatedLearningTask(Task):
             squared_sum += torch.sum(torch.pow(value, 2)).item()
         update_norm = math.sqrt(squared_sum)
         return update_norm
-
+    
     def check_ignored_weights(self, name) -> bool:
         for ignored in self.ignored_weights:
             if ignored in name:

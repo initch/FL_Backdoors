@@ -12,6 +12,8 @@ from helper import Helper
 from attack import Attack
 from utils.utils import *
 from neurotoxin import grad_mask_cv, apply_grad_mask
+import copy
+import defenses
 
 logger = logging.getLogger('logger')
 
@@ -90,6 +92,7 @@ def local_test(hlpr: Helper, local_attack: Attack, epoch, model, backdoor=False)
 
 def run(hlpr):
     acc = test(hlpr, 0, backdoor=False)
+    test(hlpr, 0, backdoor=True)
     for epoch in range(hlpr.params.start_epoch,
                        hlpr.params.epochs + 1):
         loss = train(hlpr, hlpr.attack, epoch, hlpr.task.model, hlpr.task.optimizer,
@@ -106,6 +109,8 @@ def run(hlpr):
         
 
 def fl_run(hlpr: Helper):
+    metric = test(hlpr, 0, backdoor=False)
+    test(hlpr, 0, backdoor=True)
     for epoch in range(hlpr.params.start_epoch,
                        hlpr.params.epochs + 1):
         run_fl_round(hlpr, epoch)
@@ -120,10 +125,11 @@ def run_fl_round(hlpr, epoch):
     local_model = hlpr.task.local_model
 
     round_participants = hlpr.task.sample_users_for_round(epoch)
-    weight_accumulator = hlpr.task.get_empty_accumulator()
+    # weight_accumulator = hlpr.task.get_empty_accumulator()
 
     i_mal = 0
     n_mal = hlpr.params.fl_number_of_adversaries
+    local_models = []
     for user in tqdm(round_participants):
         hlpr.task.copy_params(global_model, local_model)
         if user.compromised and epoch > hlpr.params.start_poison_epoch:
@@ -141,26 +147,44 @@ def run_fl_round(hlpr, epoch):
                     local_attack = Attack(hlpr.params, local_synthesizer)
                     train(hlpr, local_attack, local_epoch, local_model, optimizer,
                         user.train_loader, attack=True, neurotoxin=hlpr.params.neurotoxin)
+                    # Test ASR after local training by local clients
+                    if hlpr.params.synthesizer.lower() == 'dba':
+                        local_test(hlpr, local_attack, epoch, local_model, backdoor=True)
+                    else:
+                        local_test(hlpr, hlpr.attack, epoch, local_model, backdoor=True)
+                    # 保存 local_model 再聚合的方式下，攻击者要先进行模型放大再保存 (2023.10.19)
+                    hlpr.attack.fl_scale_model(local_model, global_model)
                 else:
                     train(hlpr, hlpr.attack, local_epoch, local_model, optimizer,
                         user.train_loader, attack=True, neurotoxin=hlpr.params.neurotoxin)
             else:
                 train(hlpr, hlpr.attack, local_epoch, local_model, optimizer,
                         user.train_loader, attack=False)
-        if user.compromised  and epoch > hlpr.params.start_poison_epoch:
-            if hlpr.params.synthesizer.lower() == 'dba':
-                local_test(hlpr, local_attack, epoch, local_model, backdoor=True)
-            else:
-                local_test(hlpr, hlpr.attack, epoch, local_model, backdoor=True)
-        local_update = hlpr.task.get_fl_update(local_model, global_model)
-        if user.compromised and epoch > hlpr.params.start_poison_epoch:
-            hlpr.attack.fl_scale_update(local_update)
-            # hlpr.attack.fl_scale_update(local_model, global_model)
-        hlpr.task.accumulate_weights(weight_accumulator, local_update)
-    
-    logger.warning(f"Current LR: {optimizer.param_groups[0]['lr']}")
+        local_models.append(copy.deepcopy(local_model))
 
-    hlpr.task.update_global_model(weight_accumulator, global_model)
+    ## 原本的聚合方式是累计 local updates 然后聚合，由于要加防御措施改成了保存 local_model 再聚合 (2023.10.19)
+        # Aggregate local updates
+        # local_update = hlpr.task.get_fl_update(local_model, global_model)
+        # if user.compromised and epoch > hlpr.params.start_poison_epoch:
+        #     hlpr.attack.fl_scale_update(local_update)
+        # hlpr.task.accumulate_weights(weight_accumulator, local_update)
+    # hlpr.task.update_global_model(weight_accumulator, global_model)
+
+    # 防御措施，默认为 FedAvg，即无防御
+    if hlpr.params.defense.lower() == 'fedavg':
+        hlpr.task.aggregate_global_model(local_models)
+    elif hlpr.params.defense.lower() == 'deepsight':
+        defenses.deepsight_aggregate_global_model(hlpr.task, local_models)
+    elif hlpr.params.defense.lower() == 'crfl':
+        hlpr.task.aggregate_global_model(local_models)
+        if not epoch == hlpr.task.params.epochs: # 最后一轮不做 clipping
+            defenses.clip_weight_norm(hlpr.task.model, clip=hlpr.params.clipping_norm)
+            defenses.add_differential_privacy_noise(hlpr.task.model, sigma=0.002, cp=False)
+    elif hlpr.params.defense.lower() == 'robustlr':
+        defenses.sign_voting_aggregate_global_model(hlpr.task, local_models)
+    elif hlpr.params.defense.lower() == 'FedMD': # 未完成
+        defenses.ensemble_distillation(hlpr.task, local_models)
+    logger.warning(f"Current LR: {optimizer.param_groups[0]['lr']}")
 
 
 if __name__ == '__main__':
@@ -184,6 +208,7 @@ if __name__ == '__main__':
 
     helper = Helper(params)
     logger.warning(create_table(params))
+    helper.fix_random(params['random_seed'])
 
     try:
         if helper.params.fl:

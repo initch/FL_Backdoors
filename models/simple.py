@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from models.model import Model
 
 
-class SimpleNet(Model):
+class CNN(Model):
     def __init__(self, num_classes):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 20, 5, 1)

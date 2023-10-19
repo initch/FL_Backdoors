@@ -10,24 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from models.model import Model
-from models.simple import SimpleNet
-
-def layer2module(model, layer: str):
-    if isinstance(model, ResNet):
-        if layer == 'conv1.weight':
-            return 'relu'
-        elif 'conv1.weight' in layer:
-            return layer.replace('conv1.weight', 'relu')
-        elif 'conv2.weight' in layer:
-            return layer.replace('.conv2.weight', '')
-    elif isinstance(model, SimpleNet):
-        module_name = None
-        if 'conv' in layer:
-            module_name = layer.split('.')[0]
-        elif 'fc' in layer:
-            module_name = layer.split('.')[0]
-        return module_name
-
+from models.simple import CNN
 
 # class BasicBlock(nn.Module):
 #     expansion = 1

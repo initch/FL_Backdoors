@@ -4,6 +4,7 @@ import torchvision
 from torchvision.transforms import transforms
 
 from models.lenet import LeNet5
+from models.simple import CNN
 from tasks.task import Task
 
 
@@ -63,4 +64,4 @@ class MNISTTask(Task):
         return self.load_mnist_data()
 
     def build_model(self):
-        return LeNet5(num_classes=len(self.classes))
+        return CNN(num_classes=len(self.classes))

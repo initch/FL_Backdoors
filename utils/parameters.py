@@ -125,9 +125,9 @@ class Params:
     fl_number_of_adversaries: int = 0
     fl_single_epoch_attack: int = None
     fl_weight_scale: int = 1
-    clipping: bool = False
-    clipping_norm: float = 33.0
-    invert: bool = False
+    # FL defense options
+    defense: str = 'fedavg'
+    clipping_norm: float = 14.0
 
     def __post_init__(self):
         # enable logging anyways when saving statistics
