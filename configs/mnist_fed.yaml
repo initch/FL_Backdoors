@@ -3,7 +3,7 @@ random_seed: 0
 synthesizer: Pattern
 trigger: white_3x3
 neurotoxin: False
-defense: RobustLR
+defense: deepsight
 
 batch_size: 64
 test_batch_size: 100

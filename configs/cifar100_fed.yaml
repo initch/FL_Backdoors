@@ -1,4 +1,5 @@
 task: Cifar100Fed
+random_seed: 0
 synthesizer: Pattern
 trigger: tri1_2x2
 neurotoxin: False

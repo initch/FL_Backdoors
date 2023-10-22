@@ -76,7 +76,7 @@ def create_logger():
     date_format = '%Y-%m-%d %H:%M:%S'
     if os.isatty(2):
         cformat = '%(log_color)s' + format_str
-        colors = {'DEBUG': 'blue',
+        colors = {'DEBUG': 'bold_blue',
                   'INFO': 'reset',
                   'WARNING': 'bold_yellow',
                   'ERROR': 'bold_red',

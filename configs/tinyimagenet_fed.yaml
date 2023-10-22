@@ -1,4 +1,5 @@
 task: TinyImageNetFed
+random_seed: 0
 synthesizer: Pattern
 trigger: tri1_3x3
 neurotoxin: False

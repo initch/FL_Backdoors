@@ -24,8 +24,6 @@ class CNN(Model):
         x = F.max_pool2d(x, 2, 2)
         x = F.relu(self.conv2(x))
         x = F.max_pool2d(x, 2, 2)
-        if x.requires_grad:
-            x.register_hook(self.activations_hook)
         x = x.view(-1, 4 * 4 * 50)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)

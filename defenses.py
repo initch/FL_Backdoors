@@ -4,10 +4,13 @@ from torch.nn import Module
 import copy
 import math
 import numpy as np
+import sklearn.metrics.pairwise as smp
+from sklearn.cluster import DBSCAN
+
 from collections import OrderedDict
 from typing import List
 from tasks.batch import Batch
-from sklearn.cluster import DBSCAN
+
 from tasks.fl.fl_task import FederatedLearningTask
 from tasks.fl.mnistfed_task import MNISTFedTask
 from tasks.fl.cifarfed_task import CifarFedTask
@@ -18,10 +21,10 @@ from training import logger
 
 # CRFL
 def get_model_norm(model):
-		squared_sum = 0
-		for name, layer in model.named_parameters():
-			squared_sum += torch.sum(torch.pow(layer.data, 2))
-		return math.sqrt(squared_sum)
+	squared_sum = 0
+	for name, layer in model.named_parameters():
+		squared_sum += torch.sum(torch.pow(layer.data, 2))
+	return math.sqrt(squared_sum)
 
 
 def clip_weight_norm(global_model, clip=14):
@@ -32,8 +35,8 @@ def clip_weight_norm(global_model, clip=14):
 	if total_norm > max_norm:
 		for name, layer in global_model.named_parameters():
 			layer.data.mul_(clip_coef)
-		current_norm = get_model_norm
-	logger.debug(f"[CRFL] total norm: {total_norm}, clipping norm:{clip}, current norm: {current_norm}")
+		current_norm = get_model_norm(global_model)
+	logger.debug(f"[CRFL] total norm: {total_norm}, clipping norm:{clip}.")
 	return current_norm
 
 
@@ -183,7 +186,7 @@ def sign_voting_aggregate_global_model(task: FederatedLearningTask, local_models
 
 	# 注意只适用于每个客户端均分数据的情况
 	for i, _ in enumerate(local_models):
-		prop = float(1 / task.params.fl_total_participants)
+		prop = float(1 / task.params.fl_total_participants) # non-IID情况下要修改
 		robust_lr_add_weights(original_params, robust_lrs, updates[i], prop)
 
 	task.model.load_state_dict(original_params)
@@ -214,6 +217,149 @@ def robust_lr_add_weights(original_params, robust_lrs, update, prop):
 		else:
 			original_params[layer] = original_params[layer] + update[layer] * prop * robust_lrs[layer]
 
+
+# Bulyan
+def compute_pairwise_distance(updates):
+	def pairwise(u1, u2):
+		ks = u1.keys()
+		dist = 0
+		for k in ks:
+			if 'tracked' in k:
+				continue
+			d = u1[k] - u2[k]
+			dist = dist + torch.sum(d * d)
+		return round(float(torch.sqrt(dist)), 2)
+
+	scores = [0 for u in range(len(updates))]
+	for i in range(len(updates)):
+		for j in range(i + 1, len(updates)):
+			dist = pairwise(updates[i], updates[j])
+			scores[i] = scores[i] + dist
+			scores[j] = scores[j] + dist
+	return scores
+
+def bulyan_aggregate_global_model(task: FederatedLearningTask, local_models):
+	'''Deprecated. Don't use it.'''
+	n_mal = 4
+	original_params = task.model.state_dict()
+
+	# collect client updates
+	updates = list()
+	for i in range(len(local_models)):
+		local_params = local_models[i].state_dict()
+		update = OrderedDict()
+		for layer, weight in local_params.items():
+			update[layer] = local_params[layer] - original_params[layer]
+		updates.append(update)
+
+	# temp_ids = list(copy.deepcopy(chosen_ids))
+	temp_local_models = copy.deepcopy(local_models)
+
+	krum_updates = list()
+	n_ex = 2 * n_mal
+	print("Bulyan Stage 1: ", len(updates))
+	for i in range(len(local_models)-n_ex):
+		scores = compute_pairwise_distance(updates)
+		n_update = len(updates)
+		threshold = sorted(scores)[0]
+		for k in range(n_update - 1, -1, -1):
+			if scores[k] == threshold:
+				logger.debug("local model {} is chosen:".format(k, round(scores[k], 2)))
+				krum_updates.append(updates[k])
+				del updates[k]
+				# del temp_ids[k]
+				temp_local_models.pop(k)
+				
+	print("Bulyan Stage 2: ", len(krum_updates))
+	bulyan_update = OrderedDict()
+	layers = krum_updates[0].keys()
+	for layer in layers:
+		bulyan_layer = None
+		for update in krum_updates:
+			bulyan_layer = update[layer][None, ...] if bulyan_layer is None else torch.cat(
+				(bulyan_layer, update[layer][None, ...]), 0)
+
+		med, _ = torch.median(bulyan_layer, 0)
+		_, idxs = torch.sort(torch.abs(bulyan_layer - med), 0)
+		bulyan_layer = torch.gather(bulyan_layer, 0, idxs[:-n_ex, ...])
+		# print("bulyan_layer",bulyan_layer.size())
+		# bulyan_update[layer] = torch.mean(bulyan_layer, 0)
+		# print(bulyan_layer)
+		if not 'tracked' in layer:
+			bulyan_update[layer] = torch.mean(bulyan_layer, 0)
+		else:
+			bulyan_update[layer] = torch.mean(bulyan_layer*1.0, 0).long()
+		original_params[layer] = original_params[layer] + bulyan_update[layer]
+
+	task.model.load_state_dict(original_params)
+
+
+# Foolsgold
+def vectorize_net(net):
+	return torch.cat([p.view(-1) for name, p in net.items()])
+
+def foolsgold_aggregate_global_model(task: FederatedLearningTask, local_models):
+	def foolsgold(self, grads):
+		"""
+		:param grads:
+		:return: compute similatiry and return weightings
+		"""
+		n_clients = grads.shape[0]
+		cs = smp.cosine_similarity(grads) - np.eye(n_clients)
+
+		maxcs = np.max(cs, axis=1)
+		# pardoning
+		for i in range(n_clients):
+			for j in range(n_clients):
+				if i == j:
+					continue
+				if maxcs[i] < maxcs[j]:
+					cs[i][j] = cs[i][j] * maxcs[i] / maxcs[j]
+		wv = 1 - (np.max(cs, axis=1))
+
+		wv[wv > 1] = 1
+		wv[wv < 0] = 0
+
+		alpha = np.max(cs, axis=1)
+
+		# Rescale so that max value is wv
+		wv = wv / np.max(wv)
+		wv[(wv == 1)] = .99
+
+		# Logit function
+		wv = (np.log(wv / (1 - wv)) + 0.5)
+		wv[(np.isinf(wv) + wv > 1)] = 1
+		wv[(wv < 0)] = 0
+
+		# wv is the weight
+		return wv, alpha
+	
+	original_params = task.model.state_dict()
+	# collect client updates
+	updates = list()
+	for i in range(len(local_models)):
+		local_params = local_models[i].state_dict()
+		update = OrderedDict()
+		for layer, weight in local_params.items():
+			update[layer] = local_params[layer] - original_params[layer]
+		updates.append(update)
+	
+	client_grads = [vectorize_net(cm).detach().cpu().numpy() for cm in updates]
+	grad_len = np.array(client_grads[0].shape).prod()
+	if len(names) < len(client_grads):
+		names = np.append([-1], names)  # put in adv
+	# memory = np.zeros((task.params.fl_no_models, grad_len))
+	grads = np.zeros((task.params.fl_no_models, grad_len))
+	for i in range(len(client_grads)):
+		# grads[i] = np.reshape(client_grads[i][-2].cpu().data.numpy(), (grad_len))
+		grads[i] = np.reshape(client_grads[i], (grad_len))
+
+	wv, alpha = foolsgold(grads)  # Use FG
+	logger.info(f'[foolsgold agg] wv: {wv}')
+	aggregated_grad = np.average(np.array(client_grads), weights=wv, axis=0).astype(np.float32)
+	accumulated_weights = torch.from_numpy(aggregated_grad).to(task.params.device)
+	task.update_global_model(accumulated_weights, task.model)
+	
 
 # FedMD (Ensemble Distillation)
 def ensemble_distillation(task: FederatedLearningTask, local_models):

@@ -109,8 +109,8 @@ def run(hlpr):
         
 
 def fl_run(hlpr: Helper):
-    metric = test(hlpr, 0, backdoor=False)
-    test(hlpr, 0, backdoor=True)
+    metric = test(hlpr, hlpr.params.start_epoch-1, backdoor=False)
+    test(hlpr, hlpr.params.start_epoch-1, backdoor=True)
     for epoch in range(hlpr.params.start_epoch,
                        hlpr.params.epochs + 1):
         run_fl_round(hlpr, epoch)
@@ -177,13 +177,21 @@ def run_fl_round(hlpr, epoch):
         defenses.deepsight_aggregate_global_model(hlpr.task, local_models)
     elif hlpr.params.defense.lower() == 'crfl':
         hlpr.task.aggregate_global_model(local_models)
-        if not epoch == hlpr.task.params.epochs: # 最后一轮不做 clipping
-            defenses.clip_weight_norm(hlpr.task.model, clip=hlpr.params.clipping_norm)
-            defenses.add_differential_privacy_noise(hlpr.task.model, sigma=0.002, cp=False)
+        # if not epoch == hlpr.task.params.epochs:
+        defenses.clip_weight_norm(hlpr.task.model, clip=hlpr.params.clipping_norm)
+        defenses.add_differential_privacy_noise(hlpr.task.model, sigma=0.002, cp=False)
     elif hlpr.params.defense.lower() == 'robustlr':
         defenses.sign_voting_aggregate_global_model(hlpr.task, local_models)
-    elif hlpr.params.defense.lower() == 'FedMD': # 未完成
-        defenses.ensemble_distillation(hlpr.task, local_models)
+    elif hlpr.params.defense.lower() == 'bulyan':
+        defenses.bulyan_aggregate_global_model(hlpr.task, local_models)
+    elif hlpr.params.defense.lower() == 'foolsgold':
+        defenses.foolsgold_aggregate_global_model(hlpr.task, local_models)
+    
+    # TODO
+    # elif hlpr.params.defense.lower() == 'flame':
+    # elif hlpr.params.defense.lower() == 'FedMD': # 未完成
+    #     defenses.ensemble_distillation(hlpr.task, local_models)
+    
     logger.warning(f"Current LR: {optimizer.param_groups[0]['lr']}")
 
 
